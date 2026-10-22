@@ -9,7 +9,8 @@ export const state = createState({
   error: null,
   activeTabId: NaN,
   mergeStart: NaN,
-  mergeEnd: NaN
+  mergeEnd: NaN,
+  showResetModal: false
 })
 
 /**
@@ -22,6 +23,7 @@ export const state = createState({
  * @prop {{message?: string} | null} error
  * @prop {number} mergeStart
  * @prop {number} mergeEnd
+ * @prop {boolean} showResetModal
  */
 
 /**

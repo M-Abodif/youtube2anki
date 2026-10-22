@@ -11,4 +11,5 @@ export interface Subtitle {
     disabled?: boolean;
     hash: string;
     mergedFrom?: Subtitle[];
+    originalText?: string;
 }

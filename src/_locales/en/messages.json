@@ -6,7 +6,7 @@
 		"message": "Convert YouTube Transcripts to Anki cards"
 	},
 	"extensionName": {
-		"message": "Youtube2Anki"
+		"message": "00_Youtube2Anki Pro"
 	},
 	"instructionsTitle": {
 		"message": "Transcript not found"
@@ -40,6 +40,12 @@
 	},
 	"listSelectRandom": {
 		"message": "Random"
+	},
+	"listAutoMerge": {
+		"message": "Auto-merge"
+	},
+	"listAutoMergeTitle": {
+		"message": "Merge selected cards that don't end in . ? or ! with the next one"
 	},
 	"listMerge": {
 		"message": "Merge"
@@ -94,6 +100,9 @@
 	},
 	"exportSendToAnkiNotificationDescription": {
 		"message": "Added $1 new cards"
+	},
+	"exportSendToAnkiNotificationOpened": {
+		"message": "Opened $1 cards in Anki's Add window"
 	},
 	"exportExportTitle": {
 		"message": "Export"

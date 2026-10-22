@@ -30,8 +30,8 @@ a:focus {
 }
 
 body {
-  min-width: 400px;
-  max-width: 450px;
+  min-width: 550px; /* زيادة الحد الأدنى للعرض (كان 400px) */
+  max-width: 600px; /* زيادة الحد الأقصى للعرض (كان 450px) */
   background-color: var(--main-bg-color);
   font-family: futura-pt, sans-serif,sans-serif;
   color: #3c3c3c;

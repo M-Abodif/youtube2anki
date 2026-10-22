@@ -1,7 +1,8 @@
 /**
- * Returns the given time string in seconds
+- Returns the given time string in seconds
  *
- * @param {string} time
+- 
+@param {string} time
  */
 const toSeconds = (time) => {
   const [minutes, seconds] = time.split(':')
@@ -9,9 +10,10 @@ const toSeconds = (time) => {
 }
 
 /**
- * Transforms the given object to CSV
+- Transforms the given object to CSV
  *
- * @param {Subtitle[]} subtitles
+- 
+@param {Subtitle[]} subtitles
  */
 const toCSV = (subtitles) => {
   const str = ''
@@ -22,10 +24,12 @@ const toCSV = (subtitles) => {
 }
 
 /**
- * Starts the download of the given text
+- Starts the download of the given text
  *
- * @param {string} filename
- * @param {string} text
+- 
+@param {string} filename
+- 
+@param {string} text
  */
 const download = (filename, text) => {
   const link = document.createElement('a')
@@ -38,9 +42,9 @@ const download = (filename, text) => {
 }
 
 /**
- * The transcript markups YouTube may render, checked in order:
- * the classic transcript renderer and the modern engagement panel
- * (transcript-segment-view-model)
+- The transcript markups YouTube may render, checked in order:
+- the classic transcript renderer and the modern engagement panel
+- (transcript-segment-view-model)
  */
 const MARKUPS = [
   {
@@ -56,7 +60,7 @@ const MARKUPS = [
 ]
 
 /**
- * Returns the transcript cues and the markup they were found with
+- Returns the transcript cues and the markup they were found with
  */
 const getCues = () => {
   for (const markup of MARKUPS) {
@@ -70,11 +74,14 @@ const getCues = () => {
 }
 
 /**
- * Crawl the subtitles from the YouTube transcript
+- Crawl the subtitles from the YouTube transcript
  *
- * @param {Element[]} cues
- * @param {{cue: string, timestamp: string, text: string}} markup
- * @param {string} title
+- 
+@param {Element[]} cues
+- 
+@param {{cue: string, timestamp: string, text: string}} markup
+- 
+@param {string} title
  */
 const getSubtitles = (cues, markup, title) => {
   const id = getId(window.location.href)
@@ -110,9 +117,10 @@ const getSubtitles = (cues, markup, title) => {
 }
 
 /**
- * Extracts and returns the id of a YouTube url
+- Extracts and returns the id of a YouTube url
  *
- * @param {string} url
+- 
+@param {string} url
  */
 const getId = (url) => {
   const match = url.match(/^.*(youtu.be\/|v\/|e\/|u\/\w+\/|embed\/|v=)(?<id>[^#&?]*).*/)
@@ -120,10 +128,32 @@ const getId = (url) => {
 }
 
 /**
- * Listen to messages from popup
+- Listen to messages from popup
  */
 chrome.runtime.onMessage.addListener((/** @type {Message} */request, _, sendResponse) => {
   const { type } = request
+
+  // الإضافة الجديدة: القفز للوقت المحدد وتعديل الفيديو
+  if (type === 'seekTo') {
+    const video = document.querySelector('video')
+    if (video) {
+      video.currentTime = request.timeSeconds
+      video.play()
+    }
+    return
+  }
+
+  // -- الإضافة الجديدة: إرسال الوقت الحالي للفيديو إلى الإضافة (لزر Sync) --
+  if (type === 'getCurrentTime') {
+    const video = document.querySelector('video');
+    if (video) {
+      sendResponse({ currentTime: video.currentTime });
+    } else {
+      sendResponse({ currentTime: 0 });
+    }
+    return true; // يجب إرجاع true هنا لإبقاء قناة الاتصال مفتوحة للرد غير المتزامن
+  }
+  // -----------------------------------------------------------
 
   // Saves the subtitles on the sessionStorage
   if (type === 'storeSubtitles') {
@@ -166,13 +196,21 @@ chrome.runtime.onMessage.addListener((/** @type {Message} */request, _, sendResp
 })
 
 /**
- * @typedef {object} Message
- * @prop {'getSubtitles'| 'clearSubtitles' | 'storeSubtitles' | 'download'} type
- * @prop {string} title
- * @prop {string} storageId
- * @prop {Subtitle[]} subtitles
+- 
+@typedef {object} Message
+- 
+@prop {'getSubtitles'| 'clearSubtitles' | 'storeSubtitles' | 'download' | 'seekTo' | 'getCurrentTime'} type
+- 
+@prop {string} title
+- 
+@prop {string} storageId
+- 
+@prop {Subtitle[]} subtitles
+- 
+@prop {number} timeSeconds
  */
 
 /**
- * @typedef {import('./interfaces').Subtitle} Subtitle
+- 
+@typedef {import('./interfaces').Subtitle} Subtitle
  */

@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/dobladov/youtube2Anki#readme",
   "devDependencies": {
-    "@types/chrome": "0.2.7",
+    "@types/chrome": "^0.2.7",
     "eslint": "10.9.1",
     "neostandard": "0.14.0-next.1",
     "typescript": "7.0.2",

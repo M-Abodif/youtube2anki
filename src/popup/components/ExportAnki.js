@@ -1,6 +1,6 @@
 import { elementFactory } from '../skruv-0.7.7/skruv.js'
 
-const { div, h2, button, p, a, datalist, form, input, option, br, label } = elementFactory
+const { div, h2, button, p, a, datalist, form, input, option, br, label, textarea } = elementFactory
 
 import { state as mainState } from '../state.js'
 import { sendNotification, getEnabledSubtitles } from '../utils.js'
@@ -8,37 +8,38 @@ import { sendNotification, getEnabledSubtitles } from '../utils.js'
 const scheme = 'http'
 const host = 'localhost'
 const port = 8765
+const MODEL_NAME = 'Youtube2AnkiV2'
 
 /**
- * Format the subtitles for Anki
+ * Format a subtitle as a note for Anki
  *
- * @param {Subtitle[]} subtitles
+ * @param {Subtitle} subtitle
  * @param {string} deck
  * @param {string} model
+ * @param {string} explanation
  */
-const getNotes = (subtitles, deck, model) => (
-  subtitles.map(subtitle => (
-    {
-      deckName: deck,
-      modelName: model,
-      fields: {
-        time: subtitle.time,
-        nextTime: subtitle.nextTime || '',
-        text: subtitle.text,
-        prevText: subtitle.prevText || '',
-        nextText: subtitle.nextText || '',
-        id: subtitle.id,
-        startSeconds: (subtitle.startSeconds && subtitle.startSeconds.toString()) || '',
-        endSeconds: (subtitle.endSeconds && subtitle.endSeconds.toString()) || '',
-        title: subtitle.title,
-        hash: subtitle.hash
-      },
-      tags: [],
-      options: {
-        allowDuplicate: false
-      }
+const getNote = (subtitle, deck, model, explanation) => (
+  {
+    deckName: deck,
+    modelName: model,
+    fields: {
+      time: subtitle.time,
+      nextTime: subtitle.nextTime || '',
+      text: subtitle.text,
+      prevText: subtitle.prevText || '',
+      nextText: subtitle.nextText || '',
+      id: subtitle.id,
+      startSeconds: (subtitle.startSeconds && subtitle.startSeconds.toString()) || '',
+      endSeconds: (subtitle.endSeconds && subtitle.endSeconds.toString()) || '',
+      title: subtitle.title,
+      hash: subtitle.hash,
+      Explanation: explanation
+    },
+    tags: [],
+    options: {
+      allowDuplicate: false
     }
-  ))
+  }
 )
 
 /**
@@ -107,7 +108,7 @@ const createModel = async () => {
         action: 'createModel',
         version: 6,
         params: {
-          modelName: 'Youtube2AnkiV2',
+          modelName: MODEL_NAME,
           inOrderFields: [
             'time',
             'nextTime',
@@ -118,7 +119,8 @@ const createModel = async () => {
             'startSeconds',
             'endSeconds',
             'title',
-            'hash'
+            'hash',
+            'Explanation'
           ],
           css: `
               .card {
@@ -162,6 +164,7 @@ const createModel = async () => {
               Back: `
                       {{FrontSide}}
                       <hr id=answer>
+                      {{Explanation}}
                     `
             }
           ]
@@ -175,12 +178,58 @@ const createModel = async () => {
 }
 
 /**
- * Adds the given notes to the deck
- *
- * @param {Subtitle[]} notes
- * @param {string} deckName
+ * Makes sure the model has an "Explanation" field.
+ * Models created by earlier versions of the extension do not have it,
+ * and Anki cannot fill in a field that does not exist.
  */
-const addNotes = async (notes, deckName) => {
+const ensureExplanationField = async () => {
+  const fieldNamesResponse = await fetch(`${scheme}://${host}:${port}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'modelFieldNames',
+        version: 6,
+        params: {
+          modelName: MODEL_NAME
+        }
+      })
+    }
+  )
+
+  const { result: fieldNames, error: fieldNamesError } = await fieldNamesResponse.json()
+  if (fieldNamesError) throw new Error(fieldNamesError)
+  if (fieldNames.includes('Explanation')) return
+
+  const addFieldResponse = await fetch(`${scheme}://${host}:${port}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'modelFieldAdd',
+        version: 6,
+        params: {
+          modelName: MODEL_NAME,
+          fieldName: 'Explanation'
+        }
+      })
+    }
+  )
+
+  const { error: addFieldError } = await addFieldResponse.json()
+  if (addFieldError) throw new Error(addFieldError)
+}
+
+/**
+ * Adds notes directly to Anki in a single batch request
+ *
+ * @param {Subtitle[]} subtitles
+ * @param {string} deckName
+ * @param {string} explanation
+ */
+const openAddCardsWindows = async (subtitles, deckName, explanation) => {
+  // 1. تجهيز جميع البطاقات في مجموعة واحدة
+  const notes = subtitles.map(subtitle => getNote(subtitle, deckName, MODEL_NAME, explanation))
+
+  // 2. إرسال جميع البطاقات دفعة واحدة بصمت في الخلفية
   const addNotesResponse = await fetch(`${scheme}://${host}:${port}`,
     {
       method: 'POST',
@@ -188,13 +237,13 @@ const addNotes = async (notes, deckName) => {
         action: 'addNotes',
         version: 6,
         params: {
-          notes: getNotes(notes, deckName, 'Youtube2AnkiV2')
+          notes: notes
         }
       })
     }
   )
-  const { error } = await addNotesResponse.json()
-  if (error) throw new Error(error)
+  const response = await addNotesResponse.json()
+  if (response.error) throw new Error(response.error)
 }
 
 /**
@@ -224,60 +273,70 @@ export const ExportAnki = () => div(
       await initDecks(mainState.title)
     }
   },
-  chrome.i18n.getMessage('exportSendToAnkiReconnect')
+    chrome.i18n.getMessage('exportSendToAnkiReconnect')
   ),
   !!mainState.deckNames &&
-      form(
-        {
-          onsubmit: async (/** @type {Event} */e) => {
-            e.preventDefault()
-            // @ts-ignore
-            const formData = new FormData(e.target)
-            const deckName = /** @type {string} */(formData.get('deckName'))
+  form(
+    {
+      onsubmit: async (/** @type {Event} */e) => {
+        e.preventDefault()
+        // @ts-ignore
+        const formData = new FormData(e.target)
+        const deckName = /** @type {string} */(formData.get('deckName'))
+        const explanation = /** @type {HTMLTextAreaElement | null} */(document.getElementById('userExplanation'))?.value ?? ''
 
-            try {
-              const subtitles = getEnabledSubtitles(mainState.subtitles)
+        try {
+          const subtitles = getEnabledSubtitles(mainState.subtitles)
 
-              await createDeck(deckName)
-              await createModel()
-              await addNotes(subtitles, deckName)
+          await createDeck(deckName)
+          await createModel()
+          await ensureExplanationField()
+          await openAddCardsWindows(subtitles, deckName, explanation)
 
-              sendNotification(
-                chrome.i18n.getMessage('exportSendToAnkiNotificationTitle'),
-                chrome.i18n.getMessage('exportSendToAnkiNotificationDescription', String(subtitles.length)),
-                () => window.close()
-              )
-            } catch (error) {
-              console.error(error)
-              sendNotification(
-                chrome.i18n.getMessage('exportSendToAnkiErrorCreating'),
-                // @ts-expect-error
-                error.message
-              )
-            }
-          }
-        },
-        label({ for: 'deckName' }, chrome.i18n.getMessage('exportSendToAnkiDeckName')),
-        input({
-          id: 'deckName',
-          name: 'deckName',
-          type: 'text',
-          required: true,
-          list: 'deckList',
-          value: mainState.title
-        }),
-        datalist({
-          id: 'deckList'
-        }, mainState.deckNames.map(name => option({
-          value: name
-        }, name))),
-        br({}),
-        br({}),
-        button({
-          type: 'submit',
-          class: 'btn'
-        }, chrome.i18n.getMessage('exportSendToAnkiSend'))
-      )
+          sendNotification(
+            chrome.i18n.getMessage('exportSendToAnkiNotificationTitle'),
+            chrome.i18n.getMessage('exportSendToAnkiNotificationOpened', String(subtitles.length)),
+            () => window.close()
+          )
+        } catch (error) {
+          console.error(error)
+          sendNotification(
+            chrome.i18n.getMessage('exportSendToAnkiErrorCreating'),
+            // @ts-expect-error
+            error.message
+          )
+        }
+      }
+    },
+    label({ for: 'deckName' }, chrome.i18n.getMessage('exportSendToAnkiDeckName')),
+    input({
+      id: 'deckName',
+      name: 'deckName',
+      type: 'text',
+      required: true,
+      list: 'deckList',
+      value: mainState.title
+    }),
+    datalist({
+      id: 'deckList'
+    }, mainState.deckNames.map(name => option({
+      value: name
+    }, name))),
+    br({}),
+    br({}),
+    textarea({
+      id: 'userExplanation',
+      name: 'userExplanation',
+      placeholder: 'Enter Explanation here...',
+      rows: 4
+    }),
+    br({}),
+    br({}),
+    button({
+      type: 'submit',
+      class: 'btn'
+    }, chrome.i18n.getMessage('exportSendToAnkiSend'))
+  )
 )
 
 /**
