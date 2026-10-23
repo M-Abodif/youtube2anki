@@ -5,7 +5,7 @@
  * @param {string} url
  */
 const enableDisableTab = (id, url) => {
-  const re = /(http|https):\/\/(www.)?youtube\.com\\*/
+  const re = /(http|https):\/\/(www\.)?youtube\.com\.*/
   if (re.test(url)) {
     chrome.action.enable(id)
   } else {
@@ -26,3 +26,12 @@ chrome.tabs.onUpdated.addListener((id, changeInfo, tab) => {
     id && tab?.url && enableDisableTab(id, tab.url)
   }
 })
+
+// التعديل الجديد: إرسال رسالة عند النقر على الأيقونة لفتح/إغلاق الشريط الجانبي
+chrome.action.onClicked.addListener((tab) => {
+  if (tab.id && tab.url && /(http|https):\/\/(www\.)?youtube\.com\.*/.test(tab.url)) {
+    chrome.tabs.sendMessage(tab.id, { action: "toggleSidebar" }).catch(() => {
+      // تجاهل الأخطاء إذا لم يكن content script جاهزاً
+    });
+  }
+});

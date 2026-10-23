@@ -1,12 +1,13 @@
 :root {
-  --main-bg-color: #F4F6FA;
-  --action-color: #ec6d6d;
-  --action-hover-color: #d63f3f;
-  --card-bg-color: #F2F2F7;
-  --card-bg-hover-color: #FEFEFE;
+  /* توحيد الألوان مع التصميم الفاتح الجديد (يشبه Trancy) */
+  --main-bg-color: #ffffff;
+  --action-color: #ff4757;
+  --action-hover-color: #ff6b81;
+  --card-bg-color: #f8f9fa;
+  --card-bg-hover-color: #f1f2f6;
   --p-color: #5B6171;
   --invalid-color: #ffe1e7;
-  --action-disabled-color: #d8d8d8;
+  --action-disabled-color: #ced6e0;
 }
 
 html {
@@ -17,9 +18,21 @@ html {
   box-sizing: inherit;
 }
 
+/* التعديل الجذري على html و body لمنع التمرير الأفقي */
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0 !important;
+  padding: 0 !important; /* إزالة الحواف الداخلية لتسمح للرأس والفوتر بالوصول للأطراف */
+  overflow-x: hidden !important; /* منع التمرير الأفقي إجبارياً */
+  background-color: var(--main-bg-color);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  color: #333333;
+}
+
 a {
   color: var(--action-color);
-  font-weight: 400;
+  font-weight: 500;
   text-decoration: none;
 }
 
@@ -29,21 +42,10 @@ a:focus {
   outline-color: var(--action-color);
 }
 
-body {
-  min-width: 550px; /* زيادة الحد الأدنى للعرض (كان 400px) */
-  max-width: 600px; /* زيادة الحد الأقصى للعرض (كان 450px) */
-  background-color: var(--main-bg-color);
-  font-family: futura-pt, sans-serif,sans-serif;
-  color: #3c3c3c;
-  padding: 1rem;
-  padding-top: 1.2rem;
-  padding-bottom: 0.5rem;
-  margin: 0;
-}
-
 .card {
   background-color: var(--card-bg-color);
-  box-shadow: 0 -5px 28px rgba(0,0,0,0.15), 0 10px 10px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05); /* تخفيف الظل ليكون أكثر عصرية */
+  border-radius: 12px;
 }
 
 .card:hover {
@@ -53,13 +55,14 @@ body {
 .btn {
   background-color: var(--action-color);
   border: none;
-  color: var(--card-bg-hover-color);
+  color: #ffffff;
   padding: 10px 20px;
-  border-radius: 10px;
+  border-radius: 8px; /* حواف دائرية حديثة */
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
   outline-color: var(--action-color);
+  transition: all 0.2s;
 }
 
 .btn:hover,
@@ -69,38 +72,42 @@ body {
 
 .btn:disabled {
   background-color: var(--action-disabled-color);
+  cursor: not-allowed;
 }
 
 h2 {
   margin: 0;
   color: var(--action-color);
-  font-weight: 300;
-  font-size: 22px;
+  font-weight: 600; 
+  font-size: 20px;
 }
 
 p {
-  font-weight: 300;
-  font-size: 17px;
+  font-weight: 400;
+  font-size: 16px;
   color: var(--p-color);
 }
 
 input[type=text] {
-  border: 2px solid var(--action-color);
-  padding: 5px;
+  border: 1px solid #dcdde1;
+  padding: 8px 12px;
   width: 100%;
-  background-color: transparent;
+  background-color: #ffffff;
   outline: none;
-  border-radius: 5px;
+  border-radius: 8px;
   position: relative;
+  transition: border-color 0.2s;
 }
 
 label {
   display: block;
   padding-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 input[type=text]:focus {
-  border-color: var(--action-hover-color);
+  border-color: var(--action-color);
 }
 
 .invalid {
