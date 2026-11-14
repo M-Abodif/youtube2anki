@@ -23,14 +23,14 @@
     "default_title": "__MSG_exportTitle__"
   },
   "commands": {
-  "_execute_action": {
-    "suggested_key": {
-      "default": "Alt+X",
-      "mac": "Command+X"
-    },
-    "description": "Open YouTube2Anki Sidebar"
-  }
-},
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+X",
+        "mac": "Command+X"
+      },
+      "description": "Open YouTube2Anki Sidebar"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },
@@ -44,10 +44,9 @@
         "*://*.youtube.com/*"
       ],
       "js": [
-        "youtube2Anki.js",
-        "popup/components/content.js"
+        "youtube2Anki.js"
       ],
-      "run_at": "document_start"
+      "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [

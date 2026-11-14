@@ -1,19 +1,46 @@
+// @ts-nocheck
 import { elementFactory } from '../skruv-0.7.7/skruv.js'
 import { state as mainState } from '../state.js'
-import { getEnabledSubtitles } from '../utils.js'
+import { getEnabledSubtitles, sendNotification } from '../utils.js'
 import { autoMergeByPunctuation } from '../autoMerge.js'
 
 const { div, span, ul, li, button, h2, h3, p, input } = elementFactory
 import { css } from '../skruv-0.7.7/utils/css.js'
 
-let lastCheckedIndex = null;
+let lastCheckedIndex = null
 
-// التعديل الجديد: دالة لإرسال أمر إيقاف الفيديو
+// قراءة chrome.runtime.lastError تمنع ظهور تحذير "Unchecked runtime.lastError" في الكونسول
+const ignoreLastError = () => { void chrome.runtime.lastError }
+
 const pauseYouTubeVideo = () => {
-  chrome.tabs.sendMessage(mainState.activeTabId, { type: 'pauseVideo' }, () => {
-    if (chrome.runtime.lastError) { /* تجاهل الخطأ في حال لم يتم تحميل content.js بعد */ }
-  });
-};
+  chrome.tabs.sendMessage(mainState.activeTabId, { type: 'pauseVideo' }, ignoreLastError)
+}
+
+// ثواني بداية البطاقة (مع بديل لو startSeconds غير موجودة: نقرأها من النص "5:04" أو "1:05:04")
+const getStartSeconds = (item) => {
+  if (typeof item.startSeconds === 'number') return item.startSeconds
+  const parts = String(item.time ?? '').split(':').map(Number)
+  if (!parts.length || parts.some(Number.isNaN)) return NaN
+  return parts.reduce((acc, n) => acc * 60 + n, 0)
+}
+
+// تحويل مُدخل Jump إلى ثوانٍ: "7" = الدقيقة 7 ، "15:30" ، "1:05:30"
+const parseTimeInput = (value) => {
+  const parts = value.split(':').map(Number)
+  if (parts.some(Number.isNaN)) return NaN
+  if (parts.length === 1) return parts[0] * 60
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  return parts[0] * 3600 + parts[1] * 60 + parts[2]
+}
+
+// تمرير إلى الصف + تمييزه لثانيتين
+const highlightRow = (index) => {
+  const row = document.querySelector(`[data-index="${index}"]`)?.closest('li')
+  if (!row) return
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  row.classList.add('highlight-sync')
+  setTimeout(() => row.classList.remove('highlight-sync'), 2000)
+}
 
 const getCardsToMerge = () => {
   if (isNaN(mainState.mergeStart) || isNaN(mainState.mergeEnd)) return []
@@ -27,6 +54,7 @@ const mergeCards = (cardsToMerge) => {
   const lastCard = cardsToMerge[cardsToMerge.length - 1]
   const card = {
     ...cardsToMerge[0],
+    originalText: undefined, // إصلاح: لا نرث originalText الخاص بالبطاقة الأولى فقط
     text: cardsToMerge.map(({ text }) => text).join(' '),
     endSeconds: lastCard.endSeconds,
     nextTime: lastCard.nextTime,
@@ -39,18 +67,19 @@ const mergeCards = (cardsToMerge) => {
       ...mainState.subtitles.slice(0, mainState.mergeStart),
       card,
       ...mainState.subtitles.slice(mainState.mergeEnd + 1, mainState.subtitles.length)
-    ];
+    ]
     document.querySelector(`[data-index="${mainState.mergeStart}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   } else {
     mainState.subtitles = [
       ...mainState.subtitles.slice(0, mainState.mergeEnd),
       card,
       ...mainState.subtitles.slice(mainState.mergeStart + 1, mainState.subtitles.length)
-    ];
+    ]
     document.querySelector(`[data-index="${mainState.mergeEnd}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
   mainState.mergeStart = NaN
   mainState.mergeEnd = NaN
+  lastCheckedIndex = null
 }
 
 const unmergeCard = (index) => {
@@ -63,19 +92,23 @@ const unmergeCard = (index) => {
   ]
   mainState.mergeStart = NaN
   mainState.mergeEnd = NaN
+  lastCheckedIndex = null
 }
 
 const autoMergeCards = () => {
   mainState.subtitles = autoMergeByPunctuation(mainState.subtitles)
   mainState.mergeStart = NaN
   mainState.mergeEnd = NaN
+  lastCheckedIndex = null
 }
 
 const styling = css`
   :scope {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    /* خصمنا ارتفاع التذييل (Donate / Issues / Suggestions) حتى لا يُقصّ العنوان من الأعلى.
+       عدّل الرقم 30px إذا ظهر فراغ أو بقي القص */
+    height: calc(100vh - 30px);
     width: 100%;
     margin: 0;
     padding: 0;
@@ -131,7 +164,7 @@ const styling = css`
     background-color: #f1f2f6;
     border-color: #a4b0be;
   }
-  
+
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-danger { background-color: #ff4757; color: white; border: none; }
   .btn-danger:hover:not(:disabled) { background-color: #ff6b81; }
@@ -169,7 +202,7 @@ const styling = css`
     transition: all 0.2s;
   }
   .jump-btn:hover { background-color: rgba(255, 71, 87, 0.1); }
-  
+
   .jump-btn-sync {
     background-color: #ff4757;
     color: white;
@@ -192,7 +225,7 @@ const styling = css`
   ul::-webkit-scrollbar-track { background: transparent; }
   ul::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.2); border-radius: 4px; }
   ul::-webkit-scrollbar-thumb:hover { background-color: rgba(0,0,0,0.4); }
-  
+
   li {
     position: relative;
     border-bottom: 1px solid #f1f2f6;
@@ -212,8 +245,10 @@ const styling = css`
     border: none;
     background-color: transparent;
     color: #333333;
+    font: inherit;
     text-align: left;
     outline: none;
+    user-select: none;
     transition: background-color 0.2s;
   }
 
@@ -235,12 +270,13 @@ const styling = css`
     transition: all 0.2s ease;
   }
 
-  .listButton:not(.disabled) .toggle-checkbox { background-color: #ff4757; border-color: #ff4757; }
-  .listButton:not(.disabled) .toggle-checkbox::after { content: '✓'; color: white; font-size: 12px; font-weight: bold; }
+  /* إصلاح: كلاس disabled موضوع على li وليس على listButton */
+  li:not(.disabled) .toggle-checkbox { background-color: #ff4757; border-color: #ff4757; }
+  li:not(.disabled) .toggle-checkbox::after { content: '✓'; color: white; font-size: 12px; font-weight: bold; }
 
   .time-stamp {
     font-size: 0.8rem;
-    color: var(--action-color);
+    color: var(--action-color, #ff4757);
     display: inline-flex;
     flex-direction: column;
     align-items: center;
@@ -255,7 +291,7 @@ const styling = css`
     margin-top: 2px;
     transition: background-color 0.2s;
   }
-  
+
   .time-stamp:hover { background: rgba(255, 71, 87, 0.15); }
 
   .time-end {
@@ -273,7 +309,7 @@ const styling = css`
 
   .text {
     font-size: 0.95rem;
-    line-height: 1.5; 
+    line-height: 1.5;
     outline: none;
     color: inherit;
     white-space: normal;
@@ -283,6 +319,7 @@ const styling = css`
     padding: 2px 4px;
     border-radius: 4px;
     border: 1px solid transparent;
+    user-select: text;
     transition: background-color 0.2s, border-color 0.2s;
   }
 
@@ -290,14 +327,12 @@ const styling = css`
   .text[contenteditable="true"]:focus { border-color: #ff4757; background: #ffffff; }
 
   .card-actions {
-    display: flex; 
-    gap: 8px; 
+    display: none;
+    gap: 8px;
     padding: 0 15px 12px 45px;
     flex-wrap: wrap;
     background-color: transparent;
   }
-
-  .card-actions { display: none; }
   li:hover .card-actions, li:focus-within .card-actions { display: flex; }
 
   .card-actions .btn { font-size: 0.75rem; padding: 4px 10px; flex-shrink: 0; border-radius: 12px; }
@@ -313,11 +348,11 @@ const styling = css`
   }
 
   .btn-export {
-    background-color: #2ed573; 
+    background-color: #2ed573;
     color: #ffffff;
     border: none;
     padding: 12px;
-    width: 100%; 
+    width: 100%;
     font-weight: bold;
     font-size: 1.05rem;
     border-radius: 8px;
@@ -345,21 +380,42 @@ const styling = css`
 `
 
 const toggleItem = (e, index) => {
-  const targetState = !mainState.subtitles[index].disabled;
+  const targetState = !mainState.subtitles[index].disabled
   if (e && e.shiftKey && lastCheckedIndex !== null) {
-    const start = Math.min(lastCheckedIndex, index);
-    const end = Math.max(lastCheckedIndex, index);
+    const start = Math.min(lastCheckedIndex, index)
+    const end = Math.max(lastCheckedIndex, index)
     for (let i = start; i <= end; i++) {
-      mainState.subtitles[i].disabled = targetState;
+      mainState.subtitles[i].disabled = targetState
     }
   } else {
-    mainState.subtitles[index].disabled = targetState;
+    mainState.subtitles[index].disabled = targetState
   }
-  lastCheckedIndex = index;
+  lastCheckedIndex = index
 }
 
 const setAll = (state) => {
   mainState.subtitles.forEach(item => { item.disabled = state })
+}
+
+const jumpToTime = () => {
+  const timeValue = document.getElementById('jump-time-input').value.trim()
+  if (!timeValue) return
+  const target = parseTimeInput(timeValue)
+  if (Number.isNaN(target)) return
+  const index = mainState.subtitles.findIndex(s => getStartSeconds(s) >= target)
+  if (index !== -1) highlightRow(index)
+}
+
+const syncToVideo = () => {
+  chrome.tabs.sendMessage(mainState.activeTabId, { type: 'getCurrentTime' }, (response) => {
+    if (chrome.runtime.lastError || !response) return
+    // آخر بطاقة بدايتها <= الوقت الحالي (لا تعتمد على endSeconds)
+    let target = -1
+    mainState.subtitles.forEach((sub, i) => {
+      if (getStartSeconds(sub) <= response.currentTime) target = i
+    })
+    if (target !== -1) highlightRow(target)
+  })
 }
 
 export const List = (storageId) => {
@@ -369,17 +425,17 @@ export const List = (storageId) => {
 
   return div(
     { class: `card ${styling}` },
-    
+
     div({ class: 'header-container' },
       h2({}, chrome.i18n.getMessage('listSelect') || 'Select'),
-      
+
       div({ class: 'action-buttons' },
         button({
           disabled: enabledCards === mainState.subtitles.length || undefined,
           class: 'btn',
           onclick: () => setAll(false)
         }, chrome.i18n.getMessage('listSelectAll') || 'All'),
-        
+
         button({
           class: 'btn',
           disabled: enabledCards === 0 || undefined,
@@ -389,7 +445,7 @@ export const List = (storageId) => {
         button({
           class: 'btn btn-danger',
           title: 'Restore all original subtitles',
-          onclick: () => { mainState.showResetModal = true; }
+          onclick: () => { mainState.showResetModal = true }
         }, 'Reset All'),
 
         button({
@@ -407,65 +463,38 @@ export const List = (storageId) => {
           type: 'text',
           placeholder: 'e.g., 7 or 15:30',
           onkeydown: (e) => {
-            if (e.key === 'Enter') document.getElementById('jump-btn-action').click();
+            if (e.key === 'Enter') jumpToTime()
           }
         }),
         button({
           id: 'jump-btn-action',
           class: 'jump-btn',
-          onclick: () => {
-            const timeValue = document.getElementById('jump-time-input').value.trim();
-            if (!timeValue) return;
-            const listItems = document.querySelectorAll('li');
-            for (let li of listItems) {
-              const timeSpan = li.querySelector('.time-stamp');
-              if (timeSpan && timeSpan.innerText.includes(timeValue)) {
-                li.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                li.classList.add('highlight-sync');
-                setTimeout(() => { li.classList.remove('highlight-sync'); }, 2000);
-                break;
-              }
-            }
-          }
+          onclick: jumpToTime
         }, 'Jump'),
         button({
           class: 'jump-btn jump-btn-sync',
           title: 'Scroll to current video time',
-          onclick: () => {
-            chrome.tabs.sendMessage(mainState.activeTabId, { type: 'getCurrentTime' }, (response) => {
-              if (chrome.runtime.lastError || !response) return;
-              const currentTime = response.currentTime;
-              const listItems = document.querySelectorAll('li');
-              for (let i = 0; i < mainState.subtitles.length; i++) {
-                const sub = mainState.subtitles[i];
-                if (currentTime >= sub.startSeconds && (!sub.endSeconds || currentTime < sub.endSeconds)) {
-                  const targetLi = listItems[i];
-                  if (targetLi) {
-                    targetLi.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    targetLi.classList.add('highlight-sync');
-                    setTimeout(() => { targetLi.classList.remove('highlight-sync'); }, 2000);
-                  }
-                  break;
-                }
-              }
-            });
-          }
+          onclick: syncToVideo
         }, '📍 Sync')
       )
     ),
 
     ul({},
       mainState.subtitles.map((item, i) => {
-        const isInRange = cardsToMerge.some(card => card.hash === item.hash);
+        const isInRange = cardsToMerge.some(card => card.hash === item.hash)
         return li({ class: `${item.disabled ? 'disabled' : ''}${isInRange ? ' inRange' : ''}` },
-          button({
-            onmouseover: (event) => {
-              event.currentTarget.focus()
+          // div بدل button: لأن بداخله نص قابل للتعديل وزر Undo (button داخل button غير صالح في HTML)
+          div({
+            role: 'button',
+            tabindex: '0',
+            onmouseover: () => {
               if (!isNaN(mainState.mergeStart)) mainState.mergeEnd = i
             },
             onfocus: () => { if (!isNaN(mainState.mergeStart)) mainState.mergeEnd = i },
             onkeydown: (e) => {
-              if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); toggleItem(e, i); }
+              // نتعامل فقط مع الضغط على الصف نفسه، وليس على النص أو زر Undo بداخله
+              if (e.target !== e.currentTarget) return
+              if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleItem(e, i) }
             },
             'data-index': i,
             class: 'listButton',
@@ -476,52 +505,54 @@ export const List = (storageId) => {
               class: 'time-stamp',
               title: 'Play video from this moment',
               onclick: (e) => {
-                e.stopPropagation(); 
-                const timeParts = item.time.split(':').map(Number);
-                const seconds = timeParts.length === 2
-                  ? timeParts[0] * 60 + timeParts[1]
-                  : timeParts[0] * 3600 + timeParts[1] * 60 + timeParts[2];
-                chrome.tabs.sendMessage(mainState.activeTabId, { type: 'seekTo', timeSeconds: seconds }, () => {
-                  if (chrome.runtime.lastError) {}
-                });
+                e.stopPropagation()
+                // نقرأ البطاقة من الحالة الحالية وقت الضغط (وليس من item المحفوظ في render سابق)
+                const index = Number(e.currentTarget.closest('[data-index]')?.dataset.index)
+                const seconds = getStartSeconds(mainState.subtitles[index] ?? item)
+                if (Number.isNaN(seconds)) return
+                chrome.tabs.sendMessage(mainState.activeTabId, { type: 'seekTo', timeSeconds: seconds }, (response) => {
+                  void chrome.runtime.lastError
+                  if (response?.status === 'ad') sendNotification('YouTube2Anki', 'An ad is playing. Try again when it ends.')
+                })
               }
-            }, 
+            },
               span({}, `▶ ${item.time}`),
               item.nextTime ? span({ class: 'time-end' }, item.nextTime) : ''
             ),
-            
+
             div({ class: 'text-content' },
               span({
                 class: 'text',
                 contenteditable: 'true',
                 onclick: (e) => e.stopPropagation(),
-                // التعديل الجديد: إيقاف الفيديو عند التركيز على النص للتعديل
                 onfocus: () => pauseYouTubeVideo(),
                 onblur: (e) => {
-                  const target = e.currentTarget;
-                  if (!(target instanceof HTMLElement)) return;
-                  const newText = target.innerText.trim();
+                  const target = e.currentTarget
+                  if (!(target instanceof HTMLElement)) return
+                  const newText = target.innerText.trim()
                   if (item.text !== newText) {
                     if (mainState.subtitles[i].originalText === undefined) {
-                      mainState.subtitles[i].originalText = item.text;
+                      mainState.subtitles[i].originalText = item.text
                     }
-                    mainState.subtitles[i].text = newText;
+                    mainState.subtitles[i].text = newText
                   }
                 },
                 onkeydown: (e) => {
-                  const target = e.currentTarget;
-                  if (!(target instanceof HTMLElement)) return;
-                  if (e.key === 'Enter') { e.preventDefault(); target.blur(); } 
-                  else if (e.key === 'Escape') { e.preventDefault(); target.innerText = item.text; target.blur(); }
+                  // نمنع صعود الأزرار (مثل المسافة) إلى الصف الأب أثناء الكتابة
+                  e.stopPropagation()
+                  const target = e.currentTarget
+                  if (!(target instanceof HTMLElement)) return
+                  if (e.key === 'Enter') { e.preventDefault(); target.blur() }
+                  else if (e.key === 'Escape') { e.preventDefault(); target.innerText = item.text; target.blur() }
                 }
               }, item.text),
               (item.originalText !== undefined && item.originalText !== item.text) ? button({
                 class: 'btn btn-danger',
                 style: 'margin-top: 5px; align-self: flex-start; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem;',
                 onclick: (e) => {
-                  e.stopPropagation();
-                  mainState.subtitles[i].text = item.originalText;
-                  mainState.subtitles[i].originalText = undefined;
+                  e.stopPropagation()
+                  mainState.subtitles[i].text = item.originalText
+                  mainState.subtitles[i].originalText = undefined
                 }
               }, '↩️ Undo') : ''
             )
@@ -532,26 +563,25 @@ export const List = (storageId) => {
               class: 'btn',
               style: 'background-color: transparent; border: 1px solid #dcdde1; color: #353b48;',
               onclick: (e) => {
-                e.stopPropagation();
-                navigator.clipboard.writeText(item.text);
-                const btn = e.currentTarget;
-                const originalText = btn.innerText;
-                btn.innerText = 'Copied! ✓';
-                btn.style.color = '#2ed573';
-                btn.style.borderColor = '#2ed573';
+                e.stopPropagation()
+                navigator.clipboard.writeText(item.text)
+                const btn = e.currentTarget
+                const originalText = btn.innerText
+                btn.innerText = 'Copied! ✓'
+                btn.style.color = '#2ed573'
+                btn.style.borderColor = '#2ed573'
                 setTimeout(() => {
-                  btn.innerText = originalText;
-                  btn.style.color = '#353b48';
-                  btn.style.borderColor = '#dcdde1';
-                }, 1500);
+                  btn.innerText = originalText
+                  btn.style.color = '#353b48'
+                  btn.style.borderColor = '#dcdde1'
+                }, 1500)
               }
             }, '📋 Copy'),
-            
+
             button({
               class: 'btn',
               onclick: () => {
-                // التعديل الجديد: إيقاف الفيديو عند بدء عملية الدمج
-                pauseYouTubeVideo();
+                pauseYouTubeVideo()
                 if (isNaN(mainState.mergeStart)) mainState.mergeStart = i
                 else { mainState.mergeStart = NaN; mainState.mergeEnd = NaN }
               }
@@ -587,19 +617,19 @@ export const List = (storageId) => {
         h3({}, '⚠️ Confirm Reset'),
         p({}, 'Are you sure you want to restore original subtitles?'),
         div({ class: 'custom-modal-actions' },
-          button({ class: 'btn', onclick: () => { mainState.showResetModal = false; } }, 'Cancel'),
+          button({ class: 'btn', onclick: () => { mainState.showResetModal = false } }, 'Cancel'),
           button({
             class: 'btn btn-danger',
             onclick: () => {
-              mainState.showResetModal = false;
+              mainState.showResetModal = false
               chrome.tabs.sendMessage(mainState.activeTabId, { type: 'clearSubtitles', storageId }, () => {
-                if (chrome.runtime.lastError) {}
-                location.reload();
-              });
+                ignoreLastError()
+                location.reload()
+              })
             }
           }, 'Yes, Reset')
         )
       )
     ) : ''
   )
-};
+}

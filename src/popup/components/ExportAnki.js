@@ -9,7 +9,6 @@ const host = 'localhost'
 const port = 8765
 const MODEL_NAME = 'Youtube2AnkiV2'
 
-// التعديل: السماح بـ allowDuplicate (حسب تفضيلك، ولكن الأفضل تركها false ومعالجة الخطأ)
 const getNote = (subtitle, deck, model, explanation) => (
   {
     deckName: deck,
@@ -29,7 +28,6 @@ const getNote = (subtitle, deck, model, explanation) => (
     },
     tags: [],
     options: {
-      // إبقاء false لأننا لا نريد كروت مكررة فعلياً
       allowDuplicate: false 
     }
   }
@@ -48,7 +46,7 @@ const initDecks = async (title) => {
     mainState.deckNames = decks.filter(Boolean)
   } catch (error) {
     console.warn(error)
-    mainState.error = { message: chrome.i18n.getMessage('exportSendToAnkiError') || 'Cannot connect to Anki.' }
+    mainState.error = { message: chrome.i18n.getMessage('exportSendToAnkiError') || 'Cannot connect to Anki. Make sure Anki application is open.' }
   }
 }
 
@@ -109,12 +107,9 @@ const ensureExplanationField = async () => {
   if (addFieldError) throw new Error(addFieldError)
 }
 
-// التعديل الرئيسي لحل مشكلة التكرار
 const openAddCardsWindows = async (subtitles, deckName, explanation) => {
   const notes = subtitles.map(subtitle => getNote(subtitle, deckName, MODEL_NAME, explanation))
 
-  // نستخدم canAddNotes للتحقق من الكروت قبل إرسالها (اختياري للتحسين)
-  // أو نقوم بتمرير العملية وتجاهل الأخطاء الناتجة عن التكرار فقط
   const addNotesResponse = await fetch(`${scheme}://${host}:${port}`,
     {
       method: 'POST',
@@ -124,17 +119,11 @@ const openAddCardsWindows = async (subtitles, deckName, explanation) => {
   
   const response = await addNotesResponse.json()
   
-  // إذا كان هناك خطأ، نتحقق مما إذا كان بسبب التكرار
   if (response.error) {
-    if (response.error.includes("duplicate")) {
-      // نرمي خطأ مخصص يسهل قراءته للمستخدم
-      throw new Error("Some or all cards are already in Anki (Duplicates). Only new cards were added.");
-    } else {
-      throw new Error(response.error);
-    }
+    throw new Error(response.error);
   }
   
-  return response.result; // يعود بمصفوفة من الـ IDs للكروت الناجحة أو null للمكررة
+  return response.result; 
 }
 
 export const ExportAnki = () => div(
@@ -165,7 +154,6 @@ export const ExportAnki = () => div(
         const deckName = /** @type {string} */(formData.get('deckName'))
         const explanation = /** @type {HTMLTextAreaElement | null} */(document.getElementById('userExplanation'))?.value ?? ''
 
-        // تغيير نص الزر أثناء التحميل (تجربة مستخدم أفضل)
         const submitBtn = document.getElementById('anki-submit-btn');
         if (submitBtn) {
           submitBtn.innerText = 'Sending...';
@@ -186,7 +174,6 @@ export const ExportAnki = () => div(
           
           const result = await openAddCardsWindows(subtitles, deckName, explanation)
           
-          // حساب الكروت التي تمت إضافتها بنجاح
           const addedCount = result ? result.filter(id => id !== null).length : 0;
           const duplicateCount = subtitles.length - addedCount;
 
@@ -199,24 +186,12 @@ export const ExportAnki = () => div(
           }
 
           sendNotification('Success', successMessage, () => { mainState.view = 'list'; })
-          
-          // العودة للقائمة فوراً بعد الإرسال الناجح
           mainState.view = 'list';
           
         } catch (error) {
           console.error(error)
-          
-          // إذا كان الخطأ بسبب التكرار (Duplicates) نعتبرها عملية شبه ناجحة
-          if (error.message.includes("Duplicates")) {
-             sendNotification('Notice', error.message, () => { mainState.view = 'list'; })
-             mainState.view = 'list';
-          } else {
-             // أخطاء أخرى (مثل Anki مغلق)
-             sendNotification(chrome.i18n.getMessage('exportSendToAnkiErrorCreating') || 'Error', error.message)
-          }
-          
+          sendNotification('Error', error.message)
         } finally {
-          // إعادة زر الإرسال لوضعه الطبيعي
           if (submitBtn) {
             submitBtn.innerText = chrome.i18n.getMessage('exportSendToAnkiSend') || 'Send';
             submitBtn.disabled = false;
@@ -238,7 +213,7 @@ export const ExportAnki = () => div(
     }),
     
     button({
-      id: 'anki-submit-btn', // أضفنا ID للتحكم بالزر
+      id: 'anki-submit-btn',
       type: 'submit',
       style: 'padding:10px; border-radius:6px; border:none; background-color:#2ed573; color:white; font-weight:bold; cursor:pointer; margin-top:5px; transition: background-color 0.2s;'
     }, chrome.i18n.getMessage('exportSendToAnkiSend') || 'Send')

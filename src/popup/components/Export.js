@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { elementFactory } from '../skruv-0.7.7/skruv.js'
 import { state as mainState } from '../state.js'
 import { ExportAnki } from './ExportAnki.js'
@@ -6,14 +7,18 @@ import { css } from '../skruv-0.7.7/utils/css.js'
 
 const { div, h2, button, p } = elementFactory
 
+// قراءة chrome.runtime.lastError تمنع ظهور تحذير "Unchecked runtime.lastError" في الكونسول
+const ignoreLastError = () => { void chrome.runtime.lastError }
+
 // التصميم الفاتح لصفحة التصدير
 const styling = css`
   :scope {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    /* نفس ارتفاع صفحة القائمة: نترك مكانًا للتذييل (Donate / Issues / Suggestions) */
+    height: calc(100vh - 30px);
     width: 100%;
-    background-color: #ffffff; /* أبيض */
+    background-color: #ffffff;
     color: #333333;
     overflow-x: hidden;
     overflow-y: auto;
@@ -43,7 +48,7 @@ const styling = css`
     transition: all 0.2s;
     font-weight: 500;
   }
-  
+
   .btn:hover { background-color: #f1f2f6; }
 
   .content-area {
@@ -65,7 +70,7 @@ const styling = css`
 
   h2 { margin: 0; font-size: 1.2rem; color: #ff4757; }
   p { margin: 0; font-size: 0.95rem; line-height: 1.5; color: #353b48; }
-  
+
   .btn-download {
     background-color: #ff4757;
     color: #ffffff;
@@ -74,16 +79,16 @@ const styling = css`
     align-self: flex-start;
     border-radius: 8px;
   }
-  
+
   .btn-download:hover { background-color: #ff6b81; }
 `
 
 export const Export = () => div(
   { class: styling },
   div({ class: 'header-back' },
-    button({ 
-      class: 'btn', 
-      onclick: () => { mainState.view = 'list' } 
+    button({
+      class: 'btn',
+      onclick: () => { mainState.view = 'list' }
     }, '← ' + (chrome.i18n.getMessage('exportEditCards') || 'Back to List'))
   ),
   div({ class: 'content-area' },
@@ -97,8 +102,9 @@ export const Export = () => div(
           chrome.tabs.sendMessage(mainState.activeTabId, {
             type: 'download',
             title: mainState.title,
-            subtitles: getEnabledSubtitles(toPlainSubtitles(mainState.subtitles))
-          })
+            // نفلتر المفعّلة أولًا ثم نحوّلها لكائنات عادية (لا نعتمد على بقاء الحقل disabled بعد التحويل)
+            subtitles: toPlainSubtitles(getEnabledSubtitles(mainState.subtitles))
+          }, ignoreLastError)
         }
       }, chrome.i18n.getMessage('exportExportDownload') || 'Download File')
     )
