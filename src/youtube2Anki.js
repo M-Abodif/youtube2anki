@@ -151,6 +151,15 @@ const getCues = () => {
   return { cues: [], markup: null };
 }
 
+// يوتيوب يضيف نصاً مخفياً لقارئات الشاشة قبل كل سطر، مثل "0 seconds" أو "1 minute, 5 seconds".
+// نحذفه فقط إذا طابق وقت هذا السطر بالضبط، حتى لا نمسح كلمات حقيقية من الكلام.
+const stripA11yTime = (text, startSeconds) => {
+  const m = text.match(/^\s*(?:(\d+)\s+hours?,?\s*)?(?:(\d+)\s+minutes?,?\s*)?(?:(\d+)\s+seconds?)?\s*/i)
+  if (!m || !m[0].trim()) return text
+  const total = (Number(m[1]) || 0) * 3600 + (Number(m[2]) || 0) * 60 + (Number(m[3]) || 0)
+  return total === startSeconds ? text.slice(m[0].length) : text
+}
+
 const getSubtitles = (cues, markup, title) => {
   const id = getId(window.location.href)
 
@@ -165,12 +174,14 @@ const getSubtitles = (cues, markup, title) => {
 
   const getCueText = (cue) => {
     if (!cue) return null;
+    const time = getCueTime(cue);
+    let text;
     if (markup?.isFallback) {
-      const time = getCueTime(cue);
-      if (!time) return cue.innerText.trim();
-      return cue.innerText.replace(time, '').trim();
+      text = time ? cue.innerText.replace(time, '') : cue.innerText;
+    } else {
+      text = cue.querySelector(markup.text)?.innerText || '';
     }
-    return cue.querySelector(markup.text)?.innerText.trim() || null;
+    return stripA11yTime(text.trim(), toSeconds(time)) || null;
   };
 
   return cues.map((cue, i) => {
